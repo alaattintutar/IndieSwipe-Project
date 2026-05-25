@@ -25,6 +25,33 @@ router.get('/daily', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/games/feed - Paginated feed of unseen games (infinite scroll)
+// Query params: page (default: 1), limit (default: 10)
+// Returns games the user hasn't seen yet, paginated with skip/limit.
+// Frontend calls this repeatedly, appending results to the card stack.
+router.get('/feed', authMiddleware, async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const user = await User.findById(req.user.userId);
+
+    const games = await Game.find({
+      _id: { $nin: user.seenGames }
+    })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Game.countDocuments({ _id: { $nin: user.seenGames } });
+    const hasMore = skip + games.length < total;
+
+    res.json({ games, page, hasMore });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
 // POST /api/games/save/:gameId - Save a game to user's saved list
 router.post('/save/:gameId', authMiddleware, async (req, res) => {
   try {

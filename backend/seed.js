@@ -3,63 +3,62 @@ const mongoose = require('mongoose');
 const axios = require('axios');
 const Game = require('./models/Game');
 
-// Steam App IDs for the indie games we want to seed
-const STEAM_APP_IDS = [
-  '367520',  // Hollow Knight
-  '1145360', // Hades
-  '504230',  // Celeste
-  '413150',  // Stardew Valley
-  '588650',  // Dead Cells
-  '268910',  // Cuphead
-  '753640',  // Outer Wilds
-  '391540',  // Undertale
-  '646570',  // Slay the Spire
-  '105600',  // Terraria
-  '653530',  // Return of the Obra Dinn
-  '632470',  // Disco Elysium
-  '1092790', // Inscryption
-  '1794680', // Vampire Survivors
-  '1868140', // Dave the Diver
-];
-
-// Wait between requests to respect Steam rate limits
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// Fetch game details (name, description, price, video) from Steam Store API
+// ── Step 1: Fetch top 50 indie game App IDs from SteamSpy ──────────────────
+// SteamSpy returns all games tagged as "Indie" with their review counts.
+// We sort by positive reviews and pick the top 50.
+async function fetchTopIndieAppIds(count = 50) {
+  console.log('Fetching top indie games from SteamSpy...');
+  const response = await axios.get(
+    'https://steamspy.com/api.php?request=tag&tag=Indie'
+  );
+  const games = Object.values(response.data);
+
+  // Sort by positive review count descending, pick top N
+  const sorted = games
+    .filter(g => g.positive > 0)
+    .sort((a, b) => b.positive - a.positive)
+    .slice(0, count);
+
+  console.log(`Found ${sorted.length} games from SteamSpy\n`);
+  return sorted.map(g => String(g.appid));
+}
+
+// ── Step 2: Fetch game details from Steam Store API ────────────────────────
 async function fetchGameDetails(appId) {
   try {
     const response = await axios.get(
       `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=us&l=english`
     );
     const data = response.data[appId];
-    if (!data.success) return null;
+    if (!data?.success) return null;
     return data.data;
   } catch (err) {
-    console.log(`Failed to fetch details for ${appId}: ${err.message}`);
     return null;
   }
 }
 
-// Fetch review summary from Steam (e.g. "Overwhelmingly Positive")
+// ── Step 3: Fetch review summary ───────────────────────────────────────────
 async function fetchReviewSummary(appId) {
   try {
     const response = await axios.get(
       `https://store.steampowered.com/appreviews/${appId}?json=1&language=all&purchase_type=all`
     );
     return response.data?.query_summary?.review_score_desc || 'No Reviews';
-  } catch (err) {
+  } catch {
     return 'No Reviews';
   }
 }
 
-// Extract video URL from the movies array
-// Steam now returns HLS/DASH streams instead of direct mp4/webm links
+// ── Step 4: Extract HLS video URL from movies array ────────────────────────
+// Steam now uses HLS/DASH streams instead of direct mp4/webm links
 function extractVideoUrl(movies) {
   if (!movies || movies.length === 0) return '';
-  const first = movies[0];
-  return first?.hls_h264 || first?.dash_h264 || '';
+  return movies[0]?.hls_h264 || movies[0]?.dash_h264 || '';
 }
 
+// ── Main seed function ─────────────────────────────────────────────────────
 async function seed() {
   await mongoose.connect(process.env.MONGODB_URI);
   console.log('Connected to MongoDB');
@@ -67,14 +66,23 @@ async function seed() {
   await Game.deleteMany({});
   console.log('Cleared existing games\n');
 
+  const appIds = await fetchTopIndieAppIds(50);
   const games = [];
 
-  for (const appId of STEAM_APP_IDS) {
-    console.log(`Fetching App ID: ${appId}...`);
+  for (let i = 0; i < appIds.length; i++) {
+    const appId = appIds[i];
+    console.log(`[${i + 1}/${appIds.length}] Fetching App ID: ${appId}...`);
 
     const details = await fetchGameDetails(appId);
     if (!details) {
-      console.log(`  Skipping — no data returned\n`);
+      console.log('  Skipped — no data\n');
+      await sleep(1500);
+      continue;
+    }
+
+    // Skip games without a header image (incomplete entries)
+    if (!details.header_image) {
+      console.log(`  Skipped — no image\n`);
       await sleep(1500);
       continue;
     }
@@ -84,7 +92,7 @@ async function seed() {
     const game = {
       steamAppId: appId,
       title: details.name,
-      gifUrl: details.header_image || '',
+      gifUrl: details.header_image,
       videoUrl: extractVideoUrl(details.movies),
       description: details.short_description || '',
       steamLink: `https://store.steampowered.com/app/${appId}`,
@@ -96,21 +104,18 @@ async function seed() {
     };
 
     games.push(game);
-    console.log(`  ✓ ${game.title}`);
-    console.log(`    Price: ${game.price}`);
-    console.log(`    Reviews: ${game.reviewSummary}`);
+    console.log(`  ✓ ${game.title} — ${game.price} — ${game.reviewSummary}`);
     console.log(`    Video: ${game.videoUrl ? 'found' : 'not available'}\n`);
 
-    // 1.5 second delay between requests to avoid rate limiting
     await sleep(1500);
   }
 
   await Game.insertMany(games);
-  console.log(`Seeded ${games.length} games successfully!`);
+  console.log(`\nSeeded ${games.length} games successfully!`);
   process.exit(0);
 }
 
-seed().catch((err) => {
-  console.error('Seed error:', err);
+seed().catch(err => {
+  console.error('Seed error:', err.message);
   process.exit(1);
 });
