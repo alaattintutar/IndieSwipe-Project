@@ -1,5 +1,6 @@
 import '../save_room/save_room_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; // HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:video_player/video_player.dart';
@@ -21,11 +22,40 @@ class SwipeScreen extends ConsumerStatefulWidget {
 }
 
 class _SwipeScreenState extends ConsumerState<SwipeScreen> {
-  int _currentIndex = 0;   // index within the CURRENT swiper's visible game slice
-  bool _isDone = false;     // true only when hasMore is false and all cards swiped
-  bool _waitingForMore = false; // onEnd fired but more games are expected
-  int _swiperBaseIndex = 0;    // start of current swiper's slice in the full games list
-  int _swiperEpoch = 0;        // changing this key forces CardSwiper to rebuild
+  int _currentIndex = 0;
+  bool _isDone = false;
+  bool _waitingForMore = false;
+  int _swiperBaseIndex = 0;
+  int _swiperEpoch = 0;
+  String? _selectedTag; // null = "All"
+
+  // Tag options shown in the horizontal chip row.
+  // Values match the lowercase Steam genre strings stored in MongoDB.
+  static const _tagOptions = <(String?, String)>[
+    (null, 'All'),
+    ('action', 'Action'),
+    ('adventure', 'Adventure'),
+    ('rpg', 'RPG'),
+    ('strategy', 'Strategy'),
+    ('simulation', 'Simulation'),
+    ('casual', 'Casual'),
+  ];
+
+  // ── Switch genre filter ────────────────────────────────────────────────────
+  // Resets all swipe state so the new deck starts clean, then asks the
+  // notifier to refetch with the new tag (triggers AsyncLoading → skeleton).
+  void _setTag(String? tag) {
+    if (_selectedTag == tag) return;
+    setState(() {
+      _selectedTag = tag;
+      _currentIndex = 0;
+      _isDone = false;
+      _waitingForMore = false;
+      _swiperBaseIndex = 0;
+      _swiperEpoch++;
+    });
+    ref.read(gamesProvider.notifier).setTag(tag);
+  }
 
   // ── Save game (right swipe) ────────────────────────────────────────────────
   void _saveGame(String gameId) async {
@@ -40,7 +70,8 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
             content: const Text('Could not save game'),
             backgroundColor: AppConstants.cardColor,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         );
       }
@@ -59,15 +90,14 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
   Widget build(BuildContext context) {
     final gamesAsync = ref.watch(gamesProvider);
 
-    // When we're waiting for the next batch (onEnd fired early due to slow
-    // network), watch the provider. The moment new games arrive reset the
-    // swiper so it shows only the fresh cards — _currentIndex starts at 0.
+    // When waiting for next batch, detect the moment new games arrive
+    // and reset the CardSwiper with a new epoch key.
     ref.listen<AsyncValue<GamesState>>(gamesProvider, (_, next) {
       if (!_waitingForMore) return;
       final games = next.value?.games;
       if (games != null && games.length > _swiperBaseIndex) {
         setState(() {
-          _swiperEpoch++;      // new key → CardSwiper rebuilds clean
+          _swiperEpoch++;
           _currentIndex = 0;
           _waitingForMore = false;
         });
@@ -77,151 +107,56 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
       body: SafeArea(
-        child: gamesAsync.when(
-          loading: () => const Center(
-            child: CircularProgressIndicator(color: AppConstants.primaryColor),
-          ),
-          error: (err, _) => Center(
-            child: Text(err.toString(), style: const TextStyle(color: Colors.white)),
-          ),
-          data: (gamesState) {
-            final games = gamesState.games;
+        child: Column(
+          children: [
+            // ── Top bar — always visible ─────────────────────────────────
+            _buildTopBar(context, gamesAsync),
+            const SizedBox(height: 10),
 
-            if (_isDone) return _buildEmptyState();
-            // Waiting for next batch (onEnd fired before fetch completed)
-            if (_waitingForMore) return _buildLoadingMore();
-            if (games.isEmpty) return _buildLoadingMore();
+            // ── Genre chips — always visible ─────────────────────────────
+            _buildTagChips(),
+            const SizedBox(height: 10),
 
-            // Show only the slice that belongs to the current swiper instance.
-            // Earlier batches are already swiped and must not reappear.
-            final visibleGames = games.sublist(_swiperBaseIndex);
-            if (visibleGames.isEmpty) return _buildLoadingMore();
-
-            return Column(
-              children: [
-                // Top logo bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      RichText(
-                        text: const TextSpan(
-                          children: [
-                            TextSpan(
-                              text: 'Indie',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            TextSpan(
-                              text: 'Swipe',
-                              style: TextStyle(
-                                color: AppConstants.primaryColor,
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          // Remaining card counter
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppConstants.cardColor,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppConstants.borderColor),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.local_fire_department_rounded,
-                                    color: AppConstants.primaryColor, size: 14),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${visibleGames.length - _currentIndex} left',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Shortcut to Save Room
-                          GestureDetector(
-                            onTap: () => Navigator.push(
-                              context,
-                              PageRouteBuilder(
-                                pageBuilder: (_, animation, __) =>
-                                    const SaveRoomScreen(),
-                                transitionsBuilder:
-                                    (_, animation, __, child) {
-                                  return SlideTransition(
-                                    position: Tween<Offset>(
-                                      begin: const Offset(1, 0),
-                                      end: Offset.zero,
-                                    ).animate(CurvedAnimation(
-                                      parent: animation,
-                                      curve: Curves.easeOutCubic,
-                                    )),
-                                    child: child,
-                                  );
-                                },
-                                transitionDuration:
-                                    const Duration(milliseconds: 300),
-                              ),
-                            ),
-                            child: Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: AppConstants.cardColor,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: AppConstants.borderColor),
-                              ),
-                              child: const Icon(
-                                Icons.bookmark_rounded,
-                                color: AppConstants.primaryColor,
-                                size: 18,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+            // ── Card area: skeleton / error / cards ──────────────────────
+            Expanded(
+              child: gamesAsync.when(
+                // Skeleton replaces the spinner for a polished loading feel
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: _ShimmerCard(),
                 ),
+                error: (err, _) => Center(
+                  child: Text(err.toString(),
+                      style: const TextStyle(color: Colors.white)),
+                ),
+                data: (gamesState) {
+                  final games = gamesState.games;
 
-                // Card swiper
-                Expanded(
-                  child: Padding(
+                  if (_isDone) return _buildEmptyState();
+                  if (_waitingForMore) return _buildLoadingMore();
+                  if (games.isEmpty) return _buildLoadingMore();
+
+                  final visibleGames = games.sublist(_swiperBaseIndex);
+                  if (visibleGames.isEmpty) return _buildLoadingMore();
+
+                  return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: CardSwiper(
                       key: ValueKey(_swiperEpoch),
                       cardsCount: visibleGames.length,
                       onSwipe: (previousIndex, newIndex, direction) {
                         if (direction == CardSwiperDirection.right) {
+                          HapticFeedback.mediumImpact(); // save — stronger pulse
                           _saveGame(visibleGames[previousIndex].id);
+                        } else {
+                          HapticFeedback.lightImpact(); // skip — gentle tap
                         }
                         _markAsSeen(visibleGames[previousIndex].id);
 
                         final next = newIndex ?? previousIndex + 1;
                         setState(() => _currentIndex = next);
 
-                        // ── Prefetch trigger ──────────────────────────────
-                        // When 3 cards remain in the visible slice, silently
-                        // fetch the next batch and append to the full list.
+                        // Prefetch next batch when 3 cards remain
                         final remaining = visibleGames.length - next;
                         if (remaining <= 3 &&
                             gamesState.hasMore &&
@@ -232,14 +167,11 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                         return true;
                       },
                       onEnd: () {
-                        // If more games exist (or are loading), wait for them
-                        // instead of showing the empty state prematurely.
                         if (gamesState.hasMore || gamesState.isLoadingMore) {
                           setState(() {
-                            _swiperBaseIndex = games.length; // advance the slice window
+                            _swiperBaseIndex = games.length;
                             _waitingForMore = true;
                           });
-                          // Trigger fetch if it hasn't started yet
                           if (!gamesState.isLoadingMore) {
                             ref.read(gamesProvider.notifier).fetchNextPage();
                           }
@@ -253,42 +185,202 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                         isFront: index == _currentIndex,
                       ),
                     ),
-                  ),
-                ),
+                  );
+                },
+              ),
+            ),
 
-                // Swipe hint
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12, top: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.arrow_back_rounded, color: Colors.white38, size: 16),
-                      const SizedBox(width: 6),
-                      const Text('skip',
-                          style: TextStyle(color: Colors.white38, fontSize: 12)),
-                      const SizedBox(width: 24),
-                      Text('save',
-                          style: TextStyle(
-                              color: AppConstants.primaryColor.withValues(alpha: 0.6),
-                              fontSize: 12)),
-                      const SizedBox(width: 6),
-                      Icon(Icons.arrow_forward_rounded,
-                          color: AppConstants.primaryColor.withValues(alpha: 0.6),
-                          size: 16),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
+            // ── Swipe hint — fades out when no cards visible ─────────────
+            _buildSwipeHint(gamesAsync),
+          ],
         ),
       ),
     );
   }
 
-  // Shown when onEnd fires before the next batch has arrived (slow network).
-  // ref.listen will flip _waitingForMore back to false once games load,
-  // causing a rebuild that replaces this with the card swiper.
+  // ── Always-visible top bar ─────────────────────────────────────────────────
+  Widget _buildTopBar(
+      BuildContext context, AsyncValue<GamesState> gamesAsync) {
+    final gamesState = gamesAsync.value;
+    final remaining = () {
+      if (gamesState == null ||
+          gamesState.games.length <= _swiperBaseIndex) return 0;
+      return gamesState.games.sublist(_swiperBaseIndex).length - _currentIndex;
+    }();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // IndieSwipe logo
+          RichText(
+            text: const TextSpan(
+              children: [
+                TextSpan(
+                  text: 'Indie',
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5),
+                ),
+                TextSpan(
+                  text: 'Swipe',
+                  style: TextStyle(
+                      color: AppConstants.primaryColor,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5),
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              // Remaining counter (hidden during loading)
+              if (remaining > 0) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppConstants.cardColor,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppConstants.borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.local_fire_department_rounded,
+                          color: AppConstants.primaryColor, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$remaining left',
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              // Save Room shortcut
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  PageRouteBuilder(
+                    pageBuilder: (_, __, ___) => const SaveRoomScreen(),
+                    transitionsBuilder: (_, animation, __, child) =>
+                        SlideTransition(
+                      position: Tween<Offset>(
+                              begin: const Offset(1, 0), end: Offset.zero)
+                          .animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic)),
+                      child: child,
+                    ),
+                    transitionDuration: const Duration(milliseconds: 300),
+                  ),
+                ),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppConstants.cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppConstants.borderColor),
+                  ),
+                  child: const Icon(Icons.bookmark_rounded,
+                      color: AppConstants.primaryColor, size: 18),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Horizontal genre chip row ──────────────────────────────────────────────
+  Widget _buildTagChips() {
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: _tagOptions.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final (tagValue, tagLabel) = _tagOptions[i];
+          final isSelected = _selectedTag == tagValue;
+          return GestureDetector(
+            onTap: () => _setTag(tagValue),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? AppConstants.primaryColor
+                    : AppConstants.cardColor,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? AppConstants.primaryColor
+                      : AppConstants.borderColor,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  tagLabel,
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.white
+                        : AppConstants.secondaryTextColor,
+                    fontSize: 12,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Swipe hint — fades when cards aren't visible ───────────────────────────
+  Widget _buildSwipeHint(AsyncValue<GamesState> gamesAsync) {
+    final showing = gamesAsync.hasValue && !_isDone && !_waitingForMore;
+    return AnimatedOpacity(
+      opacity: showing ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 250),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 12, top: 8),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.arrow_back_rounded,
+                color: Colors.white38, size: 16),
+            const SizedBox(width: 6),
+            const Text('skip',
+                style: TextStyle(color: Colors.white38, fontSize: 12)),
+            const SizedBox(width: 24),
+            Text('save',
+                style: TextStyle(
+                    color: AppConstants.primaryColor.withValues(alpha: 0.6),
+                    fontSize: 12)),
+            const SizedBox(width: 6),
+            Icon(Icons.arrow_forward_rounded,
+                color: AppConstants.primaryColor.withValues(alpha: 0.6),
+                size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildLoadingMore() {
     return const Center(
       child: Column(
@@ -296,16 +388,15 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
         children: [
           CircularProgressIndicator(color: AppConstants.primaryColor),
           SizedBox(height: 16),
-          Text(
-            'Loading more games…',
-            style: TextStyle(color: Colors.white38, fontSize: 14),
-          ),
+          Text('Loading more games…',
+              style: TextStyle(color: Colors.white38, fontSize: 14)),
         ],
       ),
     );
   }
 
   Widget _buildEmptyState() {
+    final hasTag = _selectedTag != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -324,16 +415,141 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                   color: AppConstants.primaryColor, size: 36),
             ),
             const SizedBox(height: 24),
-            const Text("You're all caught up.",
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
-            const SizedBox(height: 8),
-            const Text(
-              "You've seen all games for today.\nCome back tomorrow for new ones.",
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white38, fontSize: 14, height: 1.5),
+            Text(
+              hasTag ? 'No more $_selectedTag games.' : "You're all caught up.",
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700),
             ),
+            const SizedBox(height: 8),
+            Text(
+              hasTag
+                  ? 'Try a different genre or switch to All.'
+                  : "You've seen all games.\nCome back tomorrow for new ones.",
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: Colors.white38, fontSize: 14, height: 1.5),
+            ),
+            if (hasTag) ...[
+              const SizedBox(height: 20),
+              GestureDetector(
+                onTap: () => _setTag(null),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 20, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppConstants.primaryColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text('Show All',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13)),
+                ),
+              ),
+            ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Skeleton / Shimmer Card ──────────────────────────────────────────────────
+// Shown while the first batch loads or when a tag filter changes.
+// Uses an AnimationController to sweep a lighter band across the dark card,
+// mimicking the shimmer effect without any extra package.
+class _ShimmerCard extends StatefulWidget {
+  const _ShimmerCard();
+
+  @override
+  State<_ShimmerCard> createState() => _ShimmerCardState();
+}
+
+class _ShimmerCardState extends State<_ShimmerCard>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final p = -1.5 + 3 * _ctrl.value; // sweeps from -1.5 to +1.5
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Animated shimmer background
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment(p - 1, 0),
+                    end: Alignment(p, 0),
+                    colors: const [
+                      Color(0xFF18181B),
+                      Color(0xFF28282C),
+                      Color(0xFF18181B),
+                    ],
+                  ),
+                ),
+              ),
+              // Placeholder blocks mimicking the real card layout
+              Positioned(
+                left: 20,
+                right: 20,
+                bottom: 24,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _block(52, 20, radius: 5),
+                    const SizedBox(height: 10),
+                    _block(200, 26, radius: 6),
+                    const SizedBox(height: 8),
+                    _block(double.infinity, 13, radius: 4),
+                    const SizedBox(height: 6),
+                    _block(180, 13, radius: 4),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      _block(56, 20, radius: 5),
+                      const SizedBox(width: 8),
+                      _block(64, 20, radius: 5),
+                    ]),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _block(double width, double height, {double radius = 4}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(radius),
       ),
     );
   }

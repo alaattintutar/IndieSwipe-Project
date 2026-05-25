@@ -6,8 +6,6 @@ import '../games/game_model.dart';
 import '../games/game_detail_sheet.dart';
 
 // ── Provider ──────────────────────────────────────────────────────────────────
-// FutureProvider is fine here — the list is invalidated from SwipeScreen
-// every time the user saves a game, so it always refetches fresh data.
 final savedGamesProvider = FutureProvider<List<Game>>((ref) async {
   final api = ApiService();
   final response = await api.get('/games/saved');
@@ -18,6 +16,31 @@ final savedGamesProvider = FutureProvider<List<Game>>((ref) async {
 // ── SaveRoomScreen ─────────────────────────────────────────────────────────────
 class SaveRoomScreen extends ConsumerWidget {
   const SaveRoomScreen({super.key});
+
+  // ── Delete a saved game ────────────────────────────────────────────────────
+  // Calls DELETE /api/games/saved/:gameId, then invalidates the provider so
+  // the grid refreshes automatically.
+  Future<void> _deleteGame(
+      BuildContext context, WidgetRef ref, String gameId) async {
+    try {
+      final api = ApiService();
+      await api.delete('/games/saved/$gameId');
+      ref.invalidate(savedGamesProvider);
+      if (context.mounted) Navigator.pop(context); // close the sheet
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not remove game'),
+            backgroundColor: AppConstants.cardColor,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -35,11 +58,11 @@ class SaveRoomScreen extends ConsumerWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Expanded(
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Save Room',
                           style: TextStyle(
                             color: Colors.white,
@@ -48,7 +71,7 @@ class SaveRoomScreen extends ConsumerWidget {
                             letterSpacing: -0.5,
                           ),
                         ),
-                        const SizedBox(height: 4),
+                        SizedBox(height: 4),
                         Text(
                           'Your wishlist of hidden gems.',
                           style: TextStyle(
@@ -61,30 +84,30 @@ class SaveRoomScreen extends ConsumerWidget {
                   ),
                   // Game count badge
                   savedAsync.whenOrNull(
-                    data: (games) => games.isEmpty
-                        ? null
-                        : Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppConstants.primaryColor
-                                  .withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: AppConstants.primaryColor
-                                    .withValues(alpha: 0.3),
+                        data: (games) => games.isEmpty
+                            ? null
+                            : Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppConstants.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: AppConstants.primaryColor
+                                        .withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${games.length} saved',
+                                  style: const TextStyle(
+                                    color: AppConstants.primaryColor,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              '${games.length} saved',
-                              style: const TextStyle(
-                                color: AppConstants.primaryColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                  ) ??
+                      ) ??
                       const SizedBox.shrink(),
                 ],
               ),
@@ -105,7 +128,7 @@ class SaveRoomScreen extends ConsumerWidget {
                 ),
                 data: (games) => games.isEmpty
                     ? _buildEmptyState()
-                    : _buildGrid(context, games),
+                    : _buildGrid(context, ref, games),
               ),
             ),
           ],
@@ -114,18 +137,27 @@ class SaveRoomScreen extends ConsumerWidget {
     );
   }
 
-  // ── 2-column grid of saved game cards ─────────────────────────────────────
-  Widget _buildGrid(BuildContext context, List<Game> games) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.68, // taller than wide — portrait card feel
-      ),
-      itemCount: games.length,
-      itemBuilder: (context, index) => _GameGridCard(game: games[index]),
+  // ── Responsive 2-column grid ───────────────────────────────────────────────
+  Widget _buildGrid(BuildContext context, WidgetRef ref, List<Game> games) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 3 columns on wide screens (tablet/web), 2 on phones
+        final crossCount = constraints.maxWidth > 600 ? 3 : 2;
+        return GridView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossCount,
+            mainAxisSpacing: 12,
+            crossAxisSpacing: 12,
+            childAspectRatio: 0.78, // wide enough to feel grid-like, not too tall
+          ),
+          itemCount: games.length,
+          itemBuilder: (context, index) => _GameGridCard(
+            game: games[index],
+            onDelete: () => _deleteGame(context, ref, games[index].id),
+          ),
+        );
+      },
     );
   }
 
@@ -178,18 +210,19 @@ class SaveRoomScreen extends ConsumerWidget {
 }
 
 // ── _GameGridCard ─────────────────────────────────────────────────────────────
-// Cover-dominant grid card with gradient overlay.
-// Tapping opens the shared GameDetailSheet.
+// Cover-dominant portrait card. Tapping opens GameDetailSheet which contains
+// both the Steam link and the "Remove from Saved" button.
 class _GameGridCard extends StatelessWidget {
   final Game game;
-  const _GameGridCard({required this.game});
+  final VoidCallback onDelete;
+  const _GameGridCard({required this.game, required this.onDelete});
 
   void _openDetail(BuildContext context) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => GameDetailSheet(game: game),
+      builder: (_) => GameDetailSheet(game: game, onDelete: onDelete),
     );
   }
 
@@ -202,7 +235,7 @@ class _GameGridCard extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // ── Solid background — prevents flicker while image loads ──────
+            // ── Solid background ─────────────────────────────────────────
             Container(color: AppConstants.cardColor),
 
             // ── Cover image ──────────────────────────────────────────────
@@ -246,7 +279,6 @@ class _GameGridCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Price badge
                   if (game.price.isNotEmpty && game.price != 'N/A')
                     Container(
                       margin: const EdgeInsets.only(bottom: 5),
@@ -265,7 +297,6 @@ class _GameGridCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  // Title
                   Text(
                     game.title,
                     maxLines: 2,
@@ -281,7 +312,7 @@ class _GameGridCard extends StatelessWidget {
               ),
             ),
 
-            // ── Tap ripple hint (info icon, top right) ───────────────────
+            // ── Info icon (top right) ─────────────────────────────────────
             Positioned(
               top: 8,
               right: 8,

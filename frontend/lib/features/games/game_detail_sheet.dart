@@ -9,7 +9,10 @@ import 'game_model.dart';
 // and an "Open on Steam" button.
 class GameDetailSheet extends StatelessWidget {
   final Game game;
-  const GameDetailSheet({super.key, required this.game});
+  // Optional: when non-null a "Remove from Saved" button appears.
+  // Null when opened from SwipeScreen (not applicable there).
+  final VoidCallback? onDelete;
+  const GameDetailSheet({super.key, required this.game, this.onDelete});
 
   // Maps Steam's review text to a matching colour for visual feedback
   Color _reviewColor(String review) {
@@ -155,6 +158,27 @@ class GameDetailSheet extends StatelessWidget {
               style: AppConstants.primaryButtonStyle,
             ),
           ),
+
+          // Remove from Saved — only shown when opened from SaveRoomScreen
+          if (onDelete != null) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: onDelete,
+                icon: const Icon(Icons.delete_outline_rounded,
+                    size: 18, color: Colors.redAccent),
+                label: const Text('Remove from Saved',
+                    style: TextStyle(color: Colors.redAccent)),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                  side: const BorderSide(color: Colors.redAccent, width: 1),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

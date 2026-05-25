@@ -53,8 +53,13 @@ router.get('/feed', authMiddleware, async (req, res) => {
       ...frontendIds,
     ];
 
-    const games = await Game.find({ _id: { $nin: allExclude } }).limit(limit);
-    const total = await Game.countDocuments({ _id: { $nin: allExclude } });
+    // Optional genre filter — client sends lowercase tag (e.g. "action", "rpg")
+    const tag = req.query.tag || '';
+    const query = { _id: { $nin: allExclude } };
+    if (tag) query.tags = tag.toLowerCase();
+
+    const games = await Game.find(query).limit(limit);
+    const total = await Game.countDocuments(query);
 
     // hasMore is true when the pool still has games beyond what we just fetched
     const hasMore = total > games.length;
@@ -80,6 +85,19 @@ router.post('/save/:gameId', authMiddleware, async (req, res) => {
     });
 
     res.json({ message: 'Game saved successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// DELETE /api/games/saved/:gameId - Remove a game from user's saved list
+// Uses $pull to atomically remove the ID from the savedGames array.
+router.delete('/saved/:gameId', authMiddleware, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user.userId, {
+      $pull: { savedGames: req.params.gameId }
+    });
+    res.json({ message: 'Game removed from saved' });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

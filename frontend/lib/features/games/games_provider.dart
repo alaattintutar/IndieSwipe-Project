@@ -3,31 +3,34 @@ import '../../core/api_service.dart';
 import 'game_model.dart';
 
 // ── GamesState ────────────────────────────────────────────────────────────────
-// No 'page' field — we identify position by the IDs already loaded.
-// The backend uses those IDs as an exclude list, so it always returns
-// a correct next batch regardless of how seenGames has grown.
 class GamesState {
   final List<Game> games;
   final bool hasMore;
   final bool isLoadingMore;
+  final String? selectedTag; // null = "All" / no filter
 
   const GamesState({
     required this.games,
     required this.hasMore,
     this.isLoadingMore = false,
+    this.selectedTag,
   });
 
   GamesState copyWith({
     List<Game>? games,
     bool? hasMore,
     bool? isLoadingMore,
+    Object? selectedTag = _keep, // use sentinel to allow explicit null
   }) {
     return GamesState(
       games: games ?? this.games,
       hasMore: hasMore ?? this.hasMore,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      selectedTag: selectedTag == _keep ? this.selectedTag : selectedTag as String?,
     );
   }
+
+  static const Object _keep = Object();
 }
 
 // ── GamesNotifier ─────────────────────────────────────────────────────────────
@@ -36,24 +39,32 @@ class GamesNotifier extends AsyncNotifier<GamesState> {
 
   @override
   Future<GamesState> build() async {
-    // First load: no games in the stack yet → no excludeIds
-    return _fetch([]);
+    // First load: no excludes, no tag filter
+    return _fetch([], tag: null);
   }
 
-  // ── Internal: call the feed endpoint with a list of IDs to skip ───────────
-  Future<GamesState> _fetch(List<String> excludeIds) async {
-    final query = excludeIds.isNotEmpty
-        ? '/games/feed?exclude=${excludeIds.join(',')}&limit=10'
-        : '/games/feed?limit=10';
+  // ── Internal: build URL and fetch one batch ────────────────────────────────
+  Future<GamesState> _fetch(List<String> excludeIds, {String? tag}) async {
+    final params = <String>['limit=10'];
+    if (excludeIds.isNotEmpty) params.add('exclude=${excludeIds.join(',')}');
+    if (tag != null && tag.isNotEmpty) params.add('tag=$tag');
 
-    final response = await _api.get(query);
+    final response = await _api.get('/games/feed?${params.join('&')}');
     final List? raw = response.data['games'];
     final bool hasMore = response.data['hasMore'] ?? false;
     final games = raw?.map((json) => Game.fromJson(json)).toList() ?? [];
-    return GamesState(games: games, hasMore: hasMore);
+    return GamesState(games: games, hasMore: hasMore, selectedTag: tag);
   }
 
-  // ── Public: append next batch without touching existing cards ─────────────
+  // ── setTag: reset state and fetch fresh with a new tag filter ─────────────
+  // Called when user taps a chip in SwipeScreen. Sets AsyncLoading so the
+  // skeleton shows while the request is in flight.
+  Future<void> setTag(String? tag) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _fetch([], tag: tag));
+  }
+
+  // ── fetchNextPage: append next batch, keeping existing cards ──────────────
   Future<void> fetchNextPage() async {
     final current = state.value;
     if (current == null || current.isLoadingMore || !current.hasMore) return;
@@ -61,22 +72,24 @@ class GamesNotifier extends AsyncNotifier<GamesState> {
     state = AsyncData(current.copyWith(isLoadingMore: true));
 
     try {
-      // Send all currently loaded IDs — backend returns fresh games only
       final excludeIds = current.games.map((g) => g.id).toList();
-      final response = await _api.get(
-        '/games/feed?exclude=${excludeIds.join(',')}&limit=10',
-      );
+      final params = <String>[
+        'limit=10',
+        'exclude=${excludeIds.join(',')}',
+      ];
+      if (current.selectedTag != null) params.add('tag=${current.selectedTag}');
+
+      final response = await _api.get('/games/feed?${params.join('&')}');
       final List? raw = response.data['games'];
       final bool hasMore = response.data['hasMore'] ?? false;
       final newGames = raw?.map((json) => Game.fromJson(json)).toList() ?? [];
 
-      // Spread operator appends new games after existing ones
       state = AsyncData(GamesState(
         games: [...current.games, ...newGames],
         hasMore: hasMore,
+        selectedTag: current.selectedTag,
       ));
     } catch (_) {
-      // Clear loading flag so the next swipe can retry
       state = AsyncData(current.copyWith(isLoadingMore: false));
     }
   }
