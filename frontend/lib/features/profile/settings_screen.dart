@@ -3,8 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/constants.dart';
 import '../../core/api_service.dart';
-import '../games/games_provider.dart';
-import '../save_room/save_room_screen.dart';
+// games_provider and save_room_screen no longer imported here —
+// providers are NOT manually invalidated on logout (see _logout comment).
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 // Fetches the current user's profile from GET /api/auth/me.
@@ -59,14 +59,17 @@ class SettingsScreen extends ConsumerWidget {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
 
-    // Wipe providers so the next login session starts fresh
-    ref.invalidate(gamesProvider);
-    ref.invalidate(savedGamesProvider);
-    ref.invalidate(currentUserProvider);
+    // ⚠️  Do NOT call ref.invalidate() here.
+    // pushNamedAndRemoveUntil removes HomeScreen from the widget tree, which
+    // drops all listeners on gamesProvider / savedGamesProvider.
+    // Riverpod auto-disposes providers that have no listeners, so they reset
+    // cleanly. Calling invalidate() while SwipeScreen is still mounted would
+    // trigger a token-less rebuild → 401 → the error interceptor fires an
+    // extra pushReplacementNamed('/login') that corrupts the nav stack.
 
     if (context.mounted) {
-      // pushNamedAndRemoveUntil clears the entire navigation stack —
-      // the user cannot go back to the home screen with the back button.
+      // Clears the entire navigation stack — user cannot go back with the
+      // back button and re-enter the app without logging in again.
       Navigator.of(context)
           .pushNamedAndRemoveUntil('/login', (_) => false);
     }
