@@ -1,3 +1,6 @@
+// Import the CORS middleware to enable Cross-Origin Resource Sharing
+const cors = require('cors');
+
 // Load environment variables from a .env file into process.env
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -20,6 +23,8 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.send('IndieSwipe Backend is running!');
 });
+
+app.use(cors()); // Middleware to enable CORS
 
 app.use(express.json()); // Middleware to parse JSON request bodies
 

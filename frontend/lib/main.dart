@@ -1,32 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'core/constants.dart';
+import 'features/auth/login_screen.dart';
+import 'features/auth/register_screen.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  final token = prefs.getString('token');
+  runApp(ProviderScope(child: MyApp(initialRoute: token != null ? '/home' : '/login')));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final String initialRoute;
+  const MyApp({super.key, required this.initialRoute});
 
   @override
-Widget build(BuildContext context) {
-  return ProviderScope(
-    child: MaterialApp(
+  Widget build(BuildContext context) {
+    return MaterialApp(
       title: 'IndieSwipe',
       debugShowCheckedModeBanner: false,
-      home: Scaffold(
-        backgroundColor: Color(0xFF09090B),
-        body: Center(
-          child: Text(
-            'IndieSwipe',
-            style: TextStyle(
-              color: Color(0xFFFF0055),
-              fontSize: 32,
+      theme: ThemeData(scaffoldBackgroundColor: AppConstants.backgroundColor),
+      initialRoute: initialRoute,
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/home': (context) => const Scaffold(
+              backgroundColor: Color(0xFF09090B),
+              body: Center(
+                child: Text('Home - Coming Soon',
+                    style: TextStyle(color: Colors.white)),
+              ),
             ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
+      },
+    );
+  }
 }
