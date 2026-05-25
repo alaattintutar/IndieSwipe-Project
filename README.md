@@ -54,4 +54,3 @@ flutter run
 *(Not: Android Emülatör kullanıyorsanız `core/constants.dart` içindeki API adresi `10.0.2.2` olmalıdır. Web testi için `localhost` kalmalıdır.)*
 
 ---
-*Made with ❤️ by a Solo Dev exploring the frontiers of AI Pair Programming.*
