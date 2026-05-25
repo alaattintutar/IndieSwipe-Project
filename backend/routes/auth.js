@@ -4,6 +4,7 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const authMiddleware = require('../middleware/auth');
 
 // POST /api/auth/register - Register a new user
 router.post('/register', [
@@ -69,6 +70,20 @@ router.post('/login', [
     );
 
     res.json({ token, user: { id: user._id, username: user.username, role: user.role } });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// GET /api/auth/me - Return the current user's profile (password excluded)
+// Used by SettingsScreen to display username, email and role.
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({ user });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }

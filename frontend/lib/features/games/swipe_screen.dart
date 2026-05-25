@@ -1,4 +1,5 @@
 import '../save_room/save_room_screen.dart';
+import '../profile/settings_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -265,6 +266,37 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                 ),
                 const SizedBox(width: 8),
               ],
+              // Settings shortcut
+              GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  PageRouteBuilder(
+                    pageBuilder: (_, __, ___) => const SettingsScreen(),
+                    transitionsBuilder: (_, animation, __, child) =>
+                        SlideTransition(
+                      position: Tween<Offset>(
+                              begin: const Offset(1, 0), end: Offset.zero)
+                          .animate(CurvedAnimation(
+                              parent: animation,
+                              curve: Curves.easeOutCubic)),
+                      child: child,
+                    ),
+                    transitionDuration: const Duration(milliseconds: 300),
+                  ),
+                ),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppConstants.cardColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppConstants.borderColor),
+                  ),
+                  child: const Icon(Icons.settings_outlined,
+                      color: Colors.white60, size: 18),
+                ),
+              ),
+              const SizedBox(width: 8),
               // Save Room shortcut
               GestureDetector(
                 onTap: () => Navigator.push(
