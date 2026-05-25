@@ -19,11 +19,6 @@ router.get('/daily', authMiddleware, async (req, res) => {
       return res.json({ message: 'No new games today', nextDeckIn: '24h' });
     }
 
-    const gameIds = games.map(game => game._id);
-    await User.findByIdAndUpdate(req.user.userId, {
-      $push: { seenGames: { $each: gameIds } }
-    });
-
     res.json({ games });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -45,6 +40,28 @@ router.post('/save/:gameId', authMiddleware, async (req, res) => {
     });
 
     res.json({ message: 'Game saved successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// GET /api/games/saved - Get user's saved games
+router.get('/saved', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).populate('savedGames');
+    res.json({ games: user.savedGames });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+});
+
+// POST /api/games/seen/:gameId - Mark a game as seen
+router.post('/seen/:gameId', authMiddleware, async (req, res) => {
+  try {
+    await User.findByIdAndUpdate(req.user.userId, {
+      $addToSet: { seenGames: req.params.gameId }
+    });
+    res.json({ message: 'Game marked as seen' });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
