@@ -1,3 +1,4 @@
+import 'features/games/swipe_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -26,13 +27,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/home': (context) => const Scaffold(
-              backgroundColor: Color(0xFF09090B),
-              body: Center(
-                child: Text('Home - Coming Soon',
-                    style: TextStyle(color: Colors.white)),
-              ),
-            ),
+        '/home': (context) => const SwipeScreen(),
       },
     );
   }
