@@ -2,6 +2,9 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
+// Load the authentication routes defined in the 'auth.js' file
+const authRoutes = require('./routes/auth');
+
 // Import the Express framework to handle HTTP routing
 const express = require('express');
 
@@ -17,6 +20,11 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.send('IndieSwipe Backend is running!');
 });
+
+app.use(express.json()); // Middleware to parse JSON request bodies
+
+// Use the authentication routes for any requests starting with '/api/auth'
+app.use('/api/auth', authRoutes);
 
 // Connect to MongoDB using the connection string from environment variables
 mongoose.connect(process.env.MONGODB_URI)
