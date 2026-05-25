@@ -66,7 +66,9 @@ async function seed() {
   await Game.deleteMany({});
   console.log('Cleared existing games\n');
 
-  const appIds = await fetchTopIndieAppIds(50);
+  // Fetch 100 candidates — after the indie-genre and video filters
+  // we typically end up with 30-50 high-quality indie titles.
+  const appIds = await fetchTopIndieAppIds(100);
   const games = [];
 
   for (let i = 0; i < appIds.length; i++) {
@@ -87,13 +89,34 @@ async function seed() {
       continue;
     }
 
+    // Skip games not tagged as "Indie" in the Steam Store's own genre list.
+    // SteamSpy tags are user-driven and can include AAA games mislabelled as indie.
+    // Steam Store genres are official and much more reliable.
+    const hasIndieGenre = details.genres?.some(
+      g => g.description.toLowerCase() === 'indie'
+    ) ?? false;
+    if (!hasIndieGenre) {
+      console.log(`  Skipped — not Indie in Steam Store genres\n`);
+      await sleep(1500);
+      continue;
+    }
+
+    // Skip games without a video — header image fallback works but we prefer
+    // to show only games with a proper trailer for the best swipe experience.
+    const videoUrl = extractVideoUrl(details.movies);
+    if (!videoUrl) {
+      console.log(`  Skipped — no video available\n`);
+      await sleep(1500);
+      continue;
+    }
+
     const reviewSummary = await fetchReviewSummary(appId);
 
     const game = {
       steamAppId: appId,
       title: details.name,
       gifUrl: details.header_image,
-      videoUrl: extractVideoUrl(details.movies),
+      videoUrl,  // already extracted and validated above
       description: details.short_description || '',
       steamLink: `https://store.steampowered.com/app/${appId}`,
       price: details.is_free

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb, defaultTargetPlatform, TargetPlatform;
 
 class AppConstants {
   // Colors
@@ -61,5 +62,15 @@ class AppConstants {
   );
 
   // API
-  static const String baseUrl = 'http://localhost:3000/api';
+  // Platform-aware base URL:
+  //   Web / desktop  → localhost (same machine)
+  //   Android emu    → 10.0.2.2 (emulator's alias for the host PC)
+  //   Physical device → replace with your PC's local IP (e.g. 192.168.1.x)
+  static String get baseUrl {
+    if (kIsWeb) return 'http://localhost:3000/api';
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      return 'http://10.0.2.2:3000/api';
+    }
+    return 'http://localhost:3000/api';
+  }
 }
