@@ -30,7 +30,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Registration failed')),
+          SnackBar(
+            content: const Text('Registration failed. Check your inputs.'),
+            backgroundColor: AppConstants.cardColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
       }
     } finally {
@@ -42,77 +47,96 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('Create Account',
-                style: TextStyle(
-                    color: AppConstants.primaryColor,
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 48),
-            TextField(
-              controller: _usernameController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Username',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppConstants.primaryColor)),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 48),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 48),
+
+              // Decorative accent line
+              Container(
+                width: 40,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _emailController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Email',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppConstants.primaryColor)),
+              const SizedBox(height: 20),
+
+              // Title
+              Text('Create\nAccount', style: AppConstants.headingStyle),
+              const SizedBox(height: 8),
+              Text('Join the indie gaming community.', style: AppConstants.subheadingStyle),
+
+              const SizedBox(height: 44),
+
+              // Input fields
+              TextField(
+                controller: _usernameController,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                decoration: AppConstants.inputDecoration('Username'),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppConstants.primaryColor)),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _emailController,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                keyboardType: TextInputType.emailAddress,
+                decoration: AppConstants.inputDecoration('Email'),
               ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
+              const SizedBox(height: 14),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                decoration: AppConstants.inputDecoration('Password (min. 8 characters)'),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Register button
+              ElevatedButton(
                 onPressed: _isLoading ? null : _register,
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppConstants.primaryColor,
-                    padding: const EdgeInsets.symmetric(vertical: 16)),
+                style: AppConstants.primaryButtonStyle,
                 child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Register',
-                        style: TextStyle(color: Colors.white, fontSize: 16)),
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('Create Account'),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-              child: const Text('Already have an account? Login',
-                  style: TextStyle(color: Colors.grey)),
-            ),
-          ],
+
+              const SizedBox(height: 20),
+
+              // Login link
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                  child: RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'Already have an account? ',
+                          style: TextStyle(color: AppConstants.secondaryTextColor, fontSize: 14),
+                        ),
+                        const TextSpan(
+                          text: 'Sign In',
+                          style: TextStyle(
+                            color: AppConstants.primaryColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

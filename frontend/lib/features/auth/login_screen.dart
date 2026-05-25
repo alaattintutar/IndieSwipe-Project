@@ -32,7 +32,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invalid credentials')),
+          SnackBar(
+            content: const Text('Invalid credentials'),
+            backgroundColor: AppConstants.cardColor,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
         );
       }
     } finally {
@@ -44,66 +49,104 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text('IndieSwipe',
-                style: TextStyle(
-                    color: AppConstants.primaryColor,
-                    fontSize: 36,
-                    fontWeight: FontWeight.bold)),
-            const SizedBox(height: 48),
-            TextField(
-              controller: _identifierController,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Email or Username',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppConstants.primaryColor)),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 48),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 48),
+
+              // Decorative accent line
+              Container(
+                width: 40,
+                height: 3,
+                decoration: BoxDecoration(
+                  color: AppConstants.primaryColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              obscureText: true,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Password',
-                labelStyle: TextStyle(color: Colors.grey),
-                enabledBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey)),
-                focusedBorder: OutlineInputBorder(
-                    borderSide: BorderSide(color: AppConstants.primaryColor)),
+              const SizedBox(height: 20),
+
+              // Title
+              RichText(
+                text: TextSpan(
+                  children: [
+                    TextSpan(
+                      text: 'Indie',
+                      style: AppConstants.headingStyle,
+                    ),
+                    TextSpan(
+                      text: 'Swipe',
+                      style: AppConstants.headingStyle.copyWith(
+                        color: AppConstants.primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
+              const SizedBox(height: 8),
+              Text('Discover hidden gems, daily.', style: AppConstants.subheadingStyle),
+
+              const SizedBox(height: 52),
+
+              // Input fields
+              TextField(
+                controller: _identifierController,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                decoration: AppConstants.inputDecoration('Email or Username'),
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _passwordController,
+                obscureText: true,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+                decoration: AppConstants.inputDecoration('Password'),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Sign in button
+              ElevatedButton(
                 onPressed: _isLoading ? null : _login,
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppConstants.primaryColor,
-                    padding: const EdgeInsets.symmetric(vertical: 16)),
+                style: AppConstants.primaryButtonStyle,
                 child: _isLoading
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text('Login',
-                        style: TextStyle(color: Colors.white, fontSize: 16)),
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('Sign In'),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: () => Navigator.pushReplacementNamed(context, '/register'),
-              child: const Text(
-                "Don't have an account? Register",
-                style: TextStyle(color: Colors.grey),
+
+              const SizedBox(height: 20),
+
+              // Register link
+              Center(
+                child: TextButton(
+                  onPressed: () => Navigator.pushReplacementNamed(context, '/register'),
+                  child: RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: "Don't have an account? ",
+                          style: TextStyle(color: AppConstants.secondaryTextColor, fontSize: 14),
+                        ),
+                        const TextSpan(
+                          text: 'Register',
+                          style: TextStyle(
+                            color: AppConstants.primaryColor,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
