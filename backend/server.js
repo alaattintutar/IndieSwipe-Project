@@ -1,3 +1,7 @@
+// Load environment variables from a .env file into process.env
+require('dotenv').config();
+const mongoose = require('mongoose');
+
 // Import the Express framework to handle HTTP routing
 const express = require('express');
 
@@ -13,6 +17,11 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.send('IndieSwipe Backend is running!');
 });
+
+// Connect to MongoDB using the connection string from environment variables
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('Connected to MongoDB'))
+  .catch((err) => console.log('MongoDB connection error:', err));
 
 // Start the server and listen for incoming connections on the specified port
 app.listen(PORT, () => {
