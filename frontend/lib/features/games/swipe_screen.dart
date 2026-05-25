@@ -21,8 +21,11 @@ class SwipeScreen extends ConsumerStatefulWidget {
 }
 
 class _SwipeScreenState extends ConsumerState<SwipeScreen> {
-  int _currentIndex = 0;
-  bool _isDone = false;
+  int _currentIndex = 0;   // index within the CURRENT swiper's visible game slice
+  bool _isDone = false;     // true only when hasMore is false and all cards swiped
+  bool _waitingForMore = false; // onEnd fired but more games are expected
+  int _swiperBaseIndex = 0;    // start of current swiper's slice in the full games list
+  int _swiperEpoch = 0;        // changing this key forces CardSwiper to rebuild
 
   // ── Save game (right swipe) ────────────────────────────────────────────────
   void _saveGame(String gameId) async {
@@ -56,6 +59,21 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
   Widget build(BuildContext context) {
     final gamesAsync = ref.watch(gamesProvider);
 
+    // When we're waiting for the next batch (onEnd fired early due to slow
+    // network), watch the provider. The moment new games arrive reset the
+    // swiper so it shows only the fresh cards — _currentIndex starts at 0.
+    ref.listen<AsyncValue<GamesState>>(gamesProvider, (_, next) {
+      if (!_waitingForMore) return;
+      final games = next.value?.games;
+      if (games != null && games.length > _swiperBaseIndex) {
+        setState(() {
+          _swiperEpoch++;      // new key → CardSwiper rebuilds clean
+          _currentIndex = 0;
+          _waitingForMore = false;
+        });
+      }
+    });
+
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
       body: SafeArea(
@@ -67,10 +85,17 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
             child: Text(err.toString(), style: const TextStyle(color: Colors.white)),
           ),
           data: (gamesState) {
-            // gamesState is GamesState — use .games for the list
             final games = gamesState.games;
 
-            if (games.isEmpty || _isDone) return _buildEmptyState();
+            if (_isDone) return _buildEmptyState();
+            // Waiting for next batch (onEnd fired before fetch completed)
+            if (_waitingForMore) return _buildLoadingMore();
+            if (games.isEmpty) return _buildLoadingMore();
+
+            // Show only the slice that belongs to the current swiper instance.
+            // Earlier batches are already swiped and must not reappear.
+            final visibleGames = games.sublist(_swiperBaseIndex);
+            if (visibleGames.isEmpty) return _buildLoadingMore();
 
             return Column(
               children: [
@@ -116,9 +141,8 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                             const Icon(Icons.local_fire_department_rounded,
                                 color: AppConstants.primaryColor, size: 14),
                             const SizedBox(width: 4),
-                            // Shows total loaded games; grows as pages are fetched
                             Text(
-                              '${games.length} games',
+                              '${visibleGames.length - _currentIndex} left',
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -137,20 +161,21 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: CardSwiper(
-                      cardsCount: games.length,
+                      key: ValueKey(_swiperEpoch),
+                      cardsCount: visibleGames.length,
                       onSwipe: (previousIndex, newIndex, direction) {
                         if (direction == CardSwiperDirection.right) {
-                          _saveGame(games[previousIndex].id);
+                          _saveGame(visibleGames[previousIndex].id);
                         }
-                        _markAsSeen(games[previousIndex].id);
+                        _markAsSeen(visibleGames[previousIndex].id);
 
                         final next = newIndex ?? previousIndex + 1;
                         setState(() => _currentIndex = next);
 
                         // ── Prefetch trigger ──────────────────────────────
-                        // When the user is 3 cards from the end, silently
-                        // fetch the next page and append it to the list.
-                        final remaining = games.length - next;
+                        // When 3 cards remain in the visible slice, silently
+                        // fetch the next batch and append to the full list.
+                        final remaining = visibleGames.length - next;
                         if (remaining <= 3 &&
                             gamesState.hasMore &&
                             !gamesState.isLoadingMore) {
@@ -159,10 +184,25 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
 
                         return true;
                       },
-                      onEnd: () => setState(() => _isDone = true),
+                      onEnd: () {
+                        // If more games exist (or are loading), wait for them
+                        // instead of showing the empty state prematurely.
+                        if (gamesState.hasMore || gamesState.isLoadingMore) {
+                          setState(() {
+                            _swiperBaseIndex = games.length; // advance the slice window
+                            _waitingForMore = true;
+                          });
+                          // Trigger fetch if it hasn't started yet
+                          if (!gamesState.isLoadingMore) {
+                            ref.read(gamesProvider.notifier).fetchNextPage();
+                          }
+                        } else {
+                          setState(() => _isDone = true);
+                        }
+                      },
                       cardBuilder: (context, index, _, __) => _VideoCard(
-                        key: ValueKey(games[index].id),
-                        game: games[index],
+                        key: ValueKey(visibleGames[index].id),
+                        game: visibleGames[index],
                         isFront: index == _currentIndex,
                       ),
                     ),
@@ -195,6 +235,25 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
             );
           },
         ),
+      ),
+    );
+  }
+
+  // Shown when onEnd fires before the next batch has arrived (slow network).
+  // ref.listen will flip _waitingForMore back to false once games load,
+  // causing a rebuild that replaces this with the card swiper.
+  Widget _buildLoadingMore() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(color: AppConstants.primaryColor),
+          SizedBox(height: 16),
+          Text(
+            'Loading more games…',
+            style: TextStyle(color: Colors.white38, fontSize: 14),
+          ),
+        ],
       ),
     );
   }

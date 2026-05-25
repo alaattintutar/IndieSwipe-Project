@@ -25,28 +25,41 @@ router.get('/daily', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/games/feed - Paginated feed of unseen games (infinite scroll)
-// Query params: page (default: 1), limit (default: 10)
-// Returns games the user hasn't seen yet, paginated with skip/limit.
-// Frontend calls this repeatedly, appending results to the card stack.
+// GET /api/games/feed - Next batch of unseen games for the card stack
+// Query params:
+//   exclude (optional) — comma-separated IDs already loaded in the frontend
+//   limit   (optional) — how many games to return (default: 10)
+//
+// Why exclude instead of page/skip?
+// skip + $nin:seenGames creates a moving-window problem: every swipe grows
+// seenGames and shrinks the pool, so skip(N) no longer lands at the right
+// position. Sending the IDs the frontend already holds is always precise —
+// the backend simply excludes them and returns the first `limit` fresh games.
 router.get('/feed', authMiddleware, async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+
+    // Parse the comma-separated list of IDs currently in the frontend stack
+    const excludeParam = req.query.exclude || '';
+    const frontendIds = excludeParam
+      ? excludeParam.split(',').filter(Boolean)
+      : [];
 
     const user = await User.findById(req.user.userId);
 
-    const games = await Game.find({
-      _id: { $nin: user.seenGames }
-    })
-      .skip(skip)
-      .limit(limit);
+    // Combine: games already swiped (seenGames) + games currently on screen
+    const allExclude = [
+      ...user.seenGames.map(id => id.toString()),
+      ...frontendIds,
+    ];
 
-    const total = await Game.countDocuments({ _id: { $nin: user.seenGames } });
-    const hasMore = skip + games.length < total;
+    const games = await Game.find({ _id: { $nin: allExclude } }).limit(limit);
+    const total = await Game.countDocuments({ _id: { $nin: allExclude } });
 
-    res.json({ games, page, hasMore });
+    // hasMore is true when the pool still has games beyond what we just fetched
+    const hasMore = total > games.length;
+
+    res.json({ games, hasMore });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
