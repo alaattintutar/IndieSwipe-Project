@@ -32,7 +32,7 @@ class SwipeScreen extends ConsumerWidget {
             }
             return true;
           },
-          cardBuilder: (context, index, _, __) => _buildCard(games[index]),
+          cardBuilder: (context, index, _, _) => _buildCard(games[index]),
         ),
       ),
     );

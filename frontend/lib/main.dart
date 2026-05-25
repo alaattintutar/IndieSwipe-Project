@@ -1,3 +1,5 @@
+import 'features/save_room/save_room_screen.dart';
+import 'features/games/swipe_screen.dart';
 import 'features/games/swipe_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,8 +29,42 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
-        '/home': (context) => const SwipeScreen(),
+        '/home': (context) => const HomeScreen(),
       },
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  int _currentIndex = 0;
+
+  final List<Widget> _screens = const [
+    SwipeScreen(),
+    SaveRoomScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: _screens[_currentIndex],
+      bottomNavigationBar: BottomNavigationBar(
+        backgroundColor: Color(0xFF18181B),
+        selectedItemColor: Color(0xFFFF0055),
+        unselectedItemColor: Colors.grey,
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.swipe), label: 'Discover'),
+          BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Save Room'),
+        ],
+      ),
     );
   }
 }
