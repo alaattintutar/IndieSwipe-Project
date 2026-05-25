@@ -1,12 +1,12 @@
 import 'features/save_room/save_room_screen.dart';
 import 'features/games/swipe_screen.dart';
-import 'features/games/swipe_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'core/constants.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/register_screen.dart';
+import '../core/api_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +31,7 @@ class MyApp extends StatelessWidget {
         '/register': (context) => const RegisterScreen(),
         '/home': (context) => const HomeScreen(),
       },
+      navigatorKey: navigatorKey,
     );
   }
 }
@@ -53,7 +54,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: IndexedStack(
+      index: _currentIndex,
+      children: _screens,
+      ),
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: Color(0xFF18181B),
         selectedItemColor: Color(0xFFFF0055),

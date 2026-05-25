@@ -49,7 +49,18 @@ class SaveRoomScreen extends ConsumerWidget {
                       contentPadding: const EdgeInsets.all(12),
                       leading: ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(game.gifUrl, width: 60, height: 60, fit: BoxFit.cover),
+                        child: Image.network(
+                          game.gifUrl,
+                          width: 60,
+                          height: 60,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            width: 60,
+                            height: 60,
+                            color: AppConstants.cardColor,
+                            child: const Icon(Icons.broken_image, color: Colors.grey),
+                          ),
+                        ),
                       ),
                       title: Text(game.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       subtitle: Text(game.description, style: const TextStyle(color: Colors.grey, fontSize: 12), maxLines: 2, overflow: TextOverflow.ellipsis),

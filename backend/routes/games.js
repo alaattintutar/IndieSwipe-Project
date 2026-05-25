@@ -30,7 +30,7 @@ router.post('/save/:gameId', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
 
-    const alreadySaved = user.savedGames.includes(req.params.gameId);
+    const alreadySaved = user.savedGames.some(id => id.toString() === req.params.gameId);
     if (alreadySaved) {
       return res.status(400).json({ message: 'Game already saved' });
     }

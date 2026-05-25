@@ -1,6 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'constants.dart';
+import 'package:flutter/material.dart';
+
+final navigatorKey = GlobalKey<NavigatorState>();
 
 class ApiService {
   final Dio _dio;
@@ -15,7 +18,16 @@ class ApiService {
         }
         return handler.next(options);
       },
+      onError: (DioException error, handler) async {
+        if (error.response?.statusCode == 401) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.remove('token');
+          navigatorKey.currentState?.pushReplacementNamed('/login');
+        }
+        return handler.next(error);
+      },
     ));
+    
   }
 
   Future<Response> get(String path) => _dio.get(path);
