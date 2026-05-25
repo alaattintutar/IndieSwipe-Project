@@ -26,6 +26,10 @@ app.use(express.json()); // Middleware to parse JSON request bodies
 // Use the authentication routes for any requests starting with '/api/auth'
 app.use('/api/auth', authRoutes);
 
+// Load the game routes defined in the 'games.js' file and use them for any requests starting with '/api/games'
+const gameRoutes = require('./routes/games');
+app.use('/api/games', gameRoutes);
+
 // Connect to MongoDB using the connection string from environment variables
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
