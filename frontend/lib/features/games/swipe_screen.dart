@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/constants.dart';
 import '../../core/api_service.dart';
@@ -14,7 +15,6 @@ import 'game_detail_sheet.dart';
 // ── SwipeScreen ───────────────────────────────────────────────────────────────
 // ConsumerStatefulWidget keeps _currentIndex and _isDone in Flutter's own state
 // so they survive provider rebuilds (e.g. when a new page is appended).
-// A plain ConsumerWidget would reset _currentIndex to 0 on every re-render.
 class SwipeScreen extends ConsumerStatefulWidget {
   const SwipeScreen({super.key});
 
@@ -30,8 +30,9 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
   int _swiperEpoch = 0;
   String? _selectedTag; // null = "All"
 
-  // Tag options shown in the horizontal chip row.
-  // Values match the lowercase Steam genre strings stored in MongoDB.
+  // CardSwiperController lets the X / Heart buttons trigger programmatic swipes.
+  late CardSwiperController _swiperController;
+
   static const _tagOptions = <(String?, String)>[
     (null, 'All'),
     ('action', 'Action'),
@@ -42,9 +43,19 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
     ('casual', 'Casual'),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _swiperController = CardSwiperController();
+  }
+
+  @override
+  void dispose() {
+    _swiperController.dispose();
+    super.dispose();
+  }
+
   // ── Switch genre filter ────────────────────────────────────────────────────
-  // Resets all swipe state so the new deck starts clean, then asks the
-  // notifier to refetch with the new tag (triggers AsyncLoading → skeleton).
   void _setTag(String? tag) {
     if (_selectedTag == tag) return;
     setState(() {
@@ -110,18 +121,17 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Top bar — always visible ─────────────────────────────────
+            // ── Top bar ───────────────────────────────────────────────────
             _buildTopBar(context, gamesAsync),
             const SizedBox(height: 10),
 
-            // ── Genre chips — always visible ─────────────────────────────
+            // ── Genre chips ───────────────────────────────────────────────
             _buildTagChips(),
             const SizedBox(height: 10),
 
-            // ── Card area: skeleton / error / cards ──────────────────────
+            // ── Card area ─────────────────────────────────────────────────
             Expanded(
               child: gamesAsync.when(
-                // Skeleton replaces the spinner for a polished loading feel
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16),
                   child: _ShimmerCard(),
@@ -140,50 +150,66 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                   final visibleGames = games.sublist(_swiperBaseIndex);
                   if (visibleGames.isEmpty) return _buildLoadingMore();
 
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: CardSwiper(
-                      key: ValueKey(_swiperEpoch),
-                      cardsCount: visibleGames.length,
-                      onSwipe: (previousIndex, newIndex, direction) {
-                        if (direction == CardSwiperDirection.right) {
-                          HapticFeedback.mediumImpact(); // save — stronger pulse
-                          _saveGame(visibleGames[previousIndex].id);
-                        } else {
-                          HapticFeedback.lightImpact(); // skip — gentle tap
-                        }
-                        _markAsSeen(visibleGames[previousIndex].id);
+                  // Center + ConstrainedBox: on desktop/tablet the card stays
+                  // portrait-phone-sized (max 450 px wide). On phones it fills.
+                  return Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 450),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: CardSwiper(
+                          key: ValueKey(_swiperEpoch),
+                          controller: _swiperController,
+                          cardsCount: visibleGames.length,
+                          onSwipe: (previousIndex, newIndex, direction) {
+                            if (direction == CardSwiperDirection.right) {
+                              HapticFeedback.mediumImpact();
+                              _saveGame(visibleGames[previousIndex].id);
+                            } else {
+                              HapticFeedback.lightImpact();
+                            }
+                            _markAsSeen(visibleGames[previousIndex].id);
 
-                        final next = newIndex ?? previousIndex + 1;
-                        setState(() => _currentIndex = next);
+                            final next = newIndex ?? previousIndex + 1;
+                            setState(() => _currentIndex = next);
 
-                        // Prefetch next batch when 3 cards remain
-                        final remaining = visibleGames.length - next;
-                        if (remaining <= 3 &&
-                            gamesState.hasMore &&
-                            !gamesState.isLoadingMore) {
-                          ref.read(gamesProvider.notifier).fetchNextPage();
-                        }
+                            // Prefetch next batch when 3 cards remain
+                            final remaining = visibleGames.length - next;
+                            if (remaining <= 3 &&
+                                gamesState.hasMore &&
+                                !gamesState.isLoadingMore) {
+                              ref
+                                  .read(gamesProvider.notifier)
+                                  .fetchNextPage();
+                            }
 
-                        return true;
-                      },
-                      onEnd: () {
-                        if (gamesState.hasMore || gamesState.isLoadingMore) {
-                          setState(() {
-                            _swiperBaseIndex = games.length;
-                            _waitingForMore = true;
-                          });
-                          if (!gamesState.isLoadingMore) {
-                            ref.read(gamesProvider.notifier).fetchNextPage();
-                          }
-                        } else {
-                          setState(() => _isDone = true);
-                        }
-                      },
-                      cardBuilder: (context, index, _, __) => _VideoCard(
-                        key: ValueKey(visibleGames[index].id),
-                        game: visibleGames[index],
-                        isFront: index == _currentIndex,
+                            return true;
+                          },
+                          onEnd: () {
+                            if (gamesState.hasMore ||
+                                gamesState.isLoadingMore) {
+                              setState(() {
+                                _swiperBaseIndex = games.length;
+                                _waitingForMore = true;
+                              });
+                              if (!gamesState.isLoadingMore) {
+                                ref
+                                    .read(gamesProvider.notifier)
+                                    .fetchNextPage();
+                              }
+                            } else {
+                              setState(() => _isDone = true);
+                            }
+                          },
+                          cardBuilder: (context, index, _, __) {
+                            return _VideoCard(
+                              key: ValueKey(visibleGames[index].id),
+                              game: visibleGames[index],
+                              // isFront drives: neon glow, video play/pause
+                              isFront: index == _currentIndex,
+                            );
+                          },
+                        ),
                       ),
                     ),
                   );
@@ -191,8 +217,8 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
               ),
             ),
 
-            // ── Swipe hint — fades out when no cards visible ─────────────
-            _buildSwipeHint(gamesAsync),
+            // ── X / Heart action buttons ──────────────────────────────────
+            _buildActionButtons(gamesAsync),
           ],
         ),
       ),
@@ -214,25 +240,27 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // IndieSwipe logo
+          // IndieSwipe logo — Space Grotesk gives that modern SaaS look
           RichText(
-            text: const TextSpan(
+            text: TextSpan(
               children: [
                 TextSpan(
                   text: 'Indie',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5),
+                  style: GoogleFonts.spaceGrotesk(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
                 ),
                 TextSpan(
                   text: 'Swipe',
-                  style: TextStyle(
-                      color: AppConstants.primaryColor,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5),
+                  style: GoogleFonts.spaceGrotesk(
+                    color: AppConstants.primaryColor,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
                 ),
               ],
             ),
@@ -382,31 +410,40 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
     );
   }
 
-  // ── Swipe hint — fades when cards aren't visible ───────────────────────────
-  Widget _buildSwipeHint(AsyncValue<GamesState> gamesAsync) {
+  // ── X / Heart action buttons ───────────────────────────────────────────────
+  // Left button: programmatic left-swipe (skip).
+  // Right button: programmatic right-swipe (save) with neon glow.
+  // Both are hidden (opacity 0) when no cards are showing.
+  Widget _buildActionButtons(AsyncValue<GamesState> gamesAsync) {
     final showing = gamesAsync.hasValue && !_isDone && !_waitingForMore;
     return AnimatedOpacity(
       opacity: showing ? 1.0 : 0.0,
       duration: const Duration(milliseconds: 250),
       child: Padding(
-        padding: const EdgeInsets.only(bottom: 12, top: 8),
+        padding: const EdgeInsets.only(bottom: 16, top: 8),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.arrow_back_rounded,
-                color: Colors.white38, size: 16),
-            const SizedBox(width: 6),
-            const Text('skip',
-                style: TextStyle(color: Colors.white38, fontSize: 12)),
-            const SizedBox(width: 24),
-            Text('save',
-                style: TextStyle(
-                    color: AppConstants.primaryColor.withValues(alpha: 0.6),
-                    fontSize: 12)),
-            const SizedBox(width: 6),
-            Icon(Icons.arrow_forward_rounded,
-                color: AppConstants.primaryColor.withValues(alpha: 0.6),
-                size: 16),
+            // ✕ Skip
+            _ActionButton(
+              icon: Icons.close_rounded,
+              color: Colors.white54,
+              borderColor: Colors.white24,
+              onTap: showing
+                  ? () => _swiperController.swipe(CardSwiperDirection.left)
+                  : null,
+            ),
+            const SizedBox(width: 40),
+            // ♥ Save
+            _ActionButton(
+              icon: Icons.favorite_rounded,
+              color: AppConstants.primaryColor,
+              borderColor: AppConstants.primaryColor.withValues(alpha: 0.5),
+              isGlow: true,
+              onTap: showing
+                  ? () => _swiperController.swipe(CardSwiperDirection.right)
+                  : null,
+            ),
           ],
         ),
       ),
@@ -489,10 +526,52 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
   }
 }
 
+// ── _ActionButton ─────────────────────────────────────────────────────────────
+// Circular button used for the X (skip) and Heart (save) controls.
+// isGlow=true adds a neon pink BoxShadow around the heart button.
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color borderColor;
+  final bool isGlow;
+  final VoidCallback? onTap;
+
+  const _ActionButton({
+    required this.icon,
+    required this.color,
+    required this.borderColor,
+    this.isGlow = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 62,
+        height: 62,
+        decoration: BoxDecoration(
+          color: AppConstants.cardColor,
+          shape: BoxShape.circle,
+          border: Border.all(color: borderColor, width: 1.5),
+          boxShadow: isGlow
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        child: Icon(icon, color: color, size: 26),
+      ),
+    );
+  }
+}
+
 // ─── Skeleton / Shimmer Card ──────────────────────────────────────────────────
-// Shown while the first batch loads or when a tag filter changes.
-// Uses an AnimationController to sweep a lighter band across the dark card,
-// mimicking the shimmer effect without any extra package.
 class _ShimmerCard extends StatefulWidget {
   const _ShimmerCard();
 
@@ -524,13 +603,12 @@ class _ShimmerCardState extends State<_ShimmerCard>
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) {
-        final p = -1.5 + 3 * _ctrl.value; // sweeps from -1.5 to +1.5
+        final p = -1.5 + 3 * _ctrl.value;
         return ClipRRect(
           borderRadius: BorderRadius.circular(20),
           child: Stack(
             fit: StackFit.expand,
             children: [
-              // Animated shimmer background
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -544,7 +622,6 @@ class _ShimmerCardState extends State<_ShimmerCard>
                   ),
                 ),
               ),
-              // Placeholder blocks mimicking the real card layout
               Positioned(
                 left: 20,
                 right: 20,
@@ -588,10 +665,7 @@ class _ShimmerCardState extends State<_ShimmerCard>
 }
 
 // ─── Video Card Widget ────────────────────────────────────────────────────────
-// Separate StatefulWidget because VideoPlayerController needs lifecycle management
-// (init, dispose). ConsumerWidget rebuilds on every state change — having a
-// StatefulWidget here prevents the controller from being recreated unnecessarily.
-
+// Separate StatefulWidget for VideoPlayerController lifecycle management.
 class _VideoCard extends StatefulWidget {
   final Game game;
   final bool isFront;
@@ -608,23 +682,14 @@ class _VideoCardState extends State<_VideoCard> {
   @override
   void initState() {
     super.initState();
-    // Always pre-load the video — even if this card is behind.
-    // initialize() downloads and buffers the stream in the background.
-    // play() is intentionally NOT called here; we wait for isFront == true.
     _initVideo();
   }
 
   @override
   void didUpdateWidget(_VideoCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Card came to the front — video is already buffered, play instantly.
-    if (!oldWidget.isFront && widget.isFront) {
-      _controller?.play();
-    }
-    // Card went to the back — pause to save resources.
-    if (oldWidget.isFront && !widget.isFront) {
-      _controller?.pause();
-    }
+    if (!oldWidget.isFront && widget.isFront) _controller?.play();
+    if (oldWidget.isFront && !widget.isFront) _controller?.pause();
   }
 
   Future<void> _initVideo() async {
@@ -636,8 +701,6 @@ class _VideoCardState extends State<_VideoCard> {
       await controller.initialize();
       controller.setVolume(0);
       controller.setLooping(true);
-      // Start playing only if this card is already in front when init finishes.
-      // Otherwise stay paused — didUpdateWidget will trigger play() later.
       if (widget.isFront) controller.play();
       if (mounted) {
         setState(() {
@@ -645,9 +708,7 @@ class _VideoCardState extends State<_VideoCard> {
           _videoReady = true;
         });
       }
-    } catch (e) {
-      // Video failed to load — header image fallback will be shown
-    }
+    } catch (_) {}
   }
 
   @override
@@ -667,190 +728,246 @@ class _VideoCardState extends State<_VideoCard> {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(20),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // ── Solid background — prevents transparency bleed from card behind ──
-          Container(color: AppConstants.cardColor),
+    // Outer Container carries the neon border + glow (only on the front card).
+    // The BoxShadow renders *outside* the widget, so it's not clipped.
+    // The inner ClipRRect keeps video/image content neatly rounded.
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: widget.isFront
+            ? Border.all(
+                color: AppConstants.primaryColor.withValues(alpha: 0.55),
+                width: 1.5,
+              )
+            : null,
+        boxShadow: widget.isFront
+            ? [
+                BoxShadow(
+                  color: AppConstants.primaryColor.withValues(alpha: 0.28),
+                  blurRadius: 22,
+                  spreadRadius: 2,
+                ),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            // ── Solid background ──────────────────────────────────────────
+            Container(color: AppConstants.cardColor),
 
-          // ── Media layer: video or fallback image ──
-          if (_videoReady && _controller != null)
-            FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _controller!.value.size.width,
-                height: _controller!.value.size.height,
-                child: VideoPlayer(_controller!),
-              ),
-            )
-          else
-            Image.network(
-              widget.game.gifUrl,
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
+            // ── Media layer: video or fallback image ──────────────────────
+            if (_videoReady && _controller != null)
+              FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: _controller!.value.size.width,
+                  height: _controller!.value.size.height,
+                  child: VideoPlayer(_controller!),
+                ),
+              )
+            else
+              Image.network(
+                widget.game.gifUrl,
+                fit: BoxFit.cover,
+                loadingBuilder: (context, child, progress) {
+                  if (progress == null) return child;
+                  return Container(
+                    color: AppConstants.cardColor,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                          color: AppConstants.primaryColor, strokeWidth: 2),
+                    ),
+                  );
+                },
+                errorBuilder: (_, __, ___) => Container(
                   color: AppConstants.cardColor,
                   child: const Center(
-                    child: CircularProgressIndicator(
-                      color: AppConstants.primaryColor,
-                      strokeWidth: 2,
-                    ),
+                    child: Icon(Icons.broken_image_rounded,
+                        color: Colors.white24, size: 52),
                   ),
-                );
-              },
-              errorBuilder: (_, __, ___) => Container(
-                color: AppConstants.cardColor,
-                child: const Center(
-                  child: Icon(Icons.broken_image_rounded, color: Colors.white24, size: 52),
                 ),
               ),
-            ),
 
-          // ── Gradient overlay ──
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  stops: const [0.35, 1.0],
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.92),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ── Info button (top right) ──
-          Positioned(
-            top: 16,
-            right: 16,
-            child: GestureDetector(
-              onTap: () => _showDetails(context),
-              child: Container(
-                width: 36,
-                height: 36,
+            // ── Gradient overlay ──────────────────────────────────────────
+            Positioned.fill(
+              child: DecoratedBox(
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white24, width: 1),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    stops: const [0.35, 1.0],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.92),
+                    ],
+                  ),
                 ),
-                child: const Icon(Icons.info_outline_rounded,
-                    color: Colors.white70, size: 18),
               ),
             ),
-          ),
 
-          // ── Video indicator (top left) ──
-          if (_videoReady)
+            // ── Info button (top right) ───────────────────────────────────
             Positioned(
               top: 16,
-              left: 16,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white24, width: 1),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.play_circle_outline_rounded,
-                        color: Colors.white70, size: 12),
-                    SizedBox(width: 4),
-                    Text('LIVE',
-                        style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 1)),
-                  ],
+              right: 16,
+              child: GestureDetector(
+                onTap: () => _showDetails(context),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.5),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white24, width: 1),
+                  ),
+                  child: const Icon(Icons.info_outline_rounded,
+                      color: Colors.white70, size: 18),
                 ),
               ),
             ),
 
-          // ── Game info at bottom ──
-          Positioned(
-            left: 20,
-            right: 20,
-            bottom: 24,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Price badge
-                if (widget.game.price.isNotEmpty && widget.game.price != 'N/A')
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppConstants.primaryColor,
-                      borderRadius: BorderRadius.circular(6),
+            // ── GAMEPLAY badge (top left) ─────────────────────────────────
+            // Cyberpunk aesthetic: neon pink dot + "GAMEPLAY" label,
+            // glowing border, semi-transparent dark background.
+            if (_videoReady)
+              Positioned(
+                top: 16,
+                left: 16,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: AppConstants.primaryColor.withValues(alpha: 0.7),
+                      width: 1,
                     ),
-                    child: Text(
-                      widget.game.price,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppConstants.primaryColor.withValues(alpha: 0.22),
+                        blurRadius: 8,
                       ),
-                    ),
+                    ],
                   ),
-
-                Text(
-                  widget.game.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  widget.game.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-                ),
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: widget.game.tags.take(3).map((tag) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppConstants.primaryColor.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: AppConstants.primaryColor.withValues(alpha: 0.35),
-                          width: 1,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Neon dot
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: AppConstants.primaryColor,
+                          shape: BoxShape.circle,
                         ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Text(
+                        'GAMEPLAY',
+                        style: TextStyle(
+                          color: AppConstants.primaryColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // ── Game info at bottom ───────────────────────────────────────
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 24,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Price badge
+                  if (widget.game.price.isNotEmpty &&
+                      widget.game.price != 'N/A')
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppConstants.primaryColor,
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
-                        tag,
+                        widget.game.price,
                         style: const TextStyle(
-                          color: AppConstants.primaryColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    );
-                  }).toList(),
-                ),
-              ],
+                    ),
+
+                  // Title — Space Grotesk (heavy, modern tech feel)
+                  Text(
+                    widget.game.title,
+                    style: GoogleFonts.spaceGrotesk(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Description — Outfit (clean, readable body font)
+                  Text(
+                    widget.game.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.outfit(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Tags
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: widget.game.tags.take(3).map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color:
+                              AppConstants.primaryColor.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: AppConstants.primaryColor
+                                .withValues(alpha: 0.35),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            color: AppConstants.primaryColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
-
-// _GameDetailSheet has been extracted to game_detail_sheet.dart as the
-// public GameDetailSheet widget — shared with SaveRoomScreen.

@@ -40,7 +40,14 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('Connected to MongoDB'))
   .catch((err) => console.log('MongoDB connection error:', err));
 
-// Start the server and listen for incoming connections on the specified port
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Start the server only when this file is run directly (node server.js).
+// When Vercel imports this file as a serverless function it uses the
+// module.exports below — app.listen() must NOT be called in that case.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+// Export the Express app so Vercel can use it as a serverless handler.
+module.exports = app;

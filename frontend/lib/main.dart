@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'features/save_room/save_room_screen.dart';
 import 'features/games/swipe_screen.dart';
 import 'package:flutter/material.dart';
@@ -68,32 +69,43 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildBottomNav() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppConstants.backgroundColor,
-        border: Border(
-          top: BorderSide(color: AppConstants.borderColor, width: 1),
-        ),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          child: Row(
-            children: [
-              _NavItem(
-                icon: Icons.explore_rounded,
-                label: 'Discover',
-                selected: _currentIndex == 0,
-                onTap: () => setState(() => _currentIndex = 0),
+    // Glassmorphism: blur the content behind the nav bar, then overlay a
+    // semi-transparent dark surface + a very subtle white top border.
+    // ClipRect constrains the blur to the nav area so it doesn't bleed up.
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppConstants.backgroundColor.withValues(alpha: 0.75),
+            border: Border(
+              top: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08),
+                width: 0.5,
               ),
-              _NavItem(
-                icon: Icons.bookmark_rounded,
-                label: 'Save Room',
-                selected: _currentIndex == 1,
-                onTap: () => setState(() => _currentIndex = 1),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  _NavItem(
+                    icon: Icons.explore_rounded,
+                    label: 'Discover',
+                    selected: _currentIndex == 0,
+                    onTap: () => setState(() => _currentIndex = 0),
+                  ),
+                  _NavItem(
+                    icon: Icons.bookmark_rounded,
+                    label: 'Save Room',
+                    selected: _currentIndex == 1,
+                    onTap: () => setState(() => _currentIndex = 1),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),
