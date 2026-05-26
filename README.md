@@ -1,56 +1,97 @@
-# 🎮 IndieSwipe
+<p align="center">
+  <img src="frontend/assets/indieswipe_logo.png" width="140" alt="IndieSwipe Logo"/>
+</p>
 
-> "Günde Sadece 10 Oyun. Gizli Cevherleri Keşfet."
+<h1 align="center">IndieSwipe</h1>
+<p align="center"><em>"Günde Sadece 10 Oyun. Gizli Cevherleri Keşfet."</em></p>
 
-IndieSwipe, bağımsız (indie) oyunlar ve nostaljik mod paketleri için tasarlanmış, metinsiz, tamamen video/oynanış odaklı, "Tinder tarzı" bir oyun keşif platformudur.
+<p align="center">
+  <img src="https://img.shields.io/badge/Flutter-3.x-02569B?logo=flutter" />
+  <img src="https://img.shields.io/badge/Node.js-Express-339933?logo=nodedotjs" />
+  <img src="https://img.shields.io/badge/MongoDB-Atlas-47A248?logo=mongodb" />
+  <img src="https://img.shields.io/badge/Deployed-Vercel-000000?logo=vercel" />
+</p>
 
-## 🌟 Proje Vizyonu (MVP)
-Günümüzün bilgi yığını ve sonsuz kaydırma (doomscrolling) çılgınlığına karşı bir panzehir:
-* **Günlük 10 Kart Ritüeli:** Kullanıcıya günde sadece özenle seçilmiş 10 oyun sunulur. Sonsuz kaydırma (bağımlılık) yoktur.
-* **Sıfır Metin, Sadece Oynanış:** Uzun ve sıkıcı yazılar yerine, oyunun ruhunu anlatan saf oynanış kesitleri (GIF).
-* **Save Room (Kayıt Odası):** Beğendiğin (sağa kaydırdığın) oyunlar kendi kişisel arşivine kaydedilir ve tek tıkla Steam sayfasına yönlendirir.
+---
 
-## 🛠️ Teknoloji Yığını (Tech Stack)
+IndieSwipe, Steam'in bağımsız oyun kataloğundan özenle seçilmiş oyunları **Tinder tarzı video kartlarıyla** keşfettiren bir mobil uygulamadır. Uzun listeler ve yazı yığınları yerine saf oynanış videosu — beğendiklerini bir kaydırmayla arşivine kaydet.
+
+## Özellikler
+
+- **Video Swipe Kartlar** — Her kart oyunun gerçek oynanış videosunu (MP4) oynatır
+- **Tek Tıkla Detay** — Karta dokunmak oyun detaylarını ve Steam linkini açar
+- **Çift Tıkla Kaydet** — İki kez dokunmak sağa kaydırır, oyunu arşivine ekler
+- **Mute / Unmute** — Kart üzerinde anlık ses kontrolü
+- **Tür Filtreleme** — Action, Adventure, RPG, Strategy, Simulation, Casual chip'leriyle
+- **Save Room** — Kaydedilen oyunların kişisel galerisi, tek tıkla Steam'e yönlendir
+- **JWT Kimlik Doğrulama** — Kayıt / giriş, otomatik token yönetimi (interceptor)
+- **Glassmorphism Nav Bar** — Blur efektli navigasyon çubuğu
+
+## Tech Stack
+
+| Katman | Teknoloji |
+|--------|-----------|
+| Frontend | Flutter · Riverpod · Dio · flutter_card_swiper · video_player · Google Fonts |
+| Backend | Node.js · Express.js · MongoDB Atlas · JWT · bcrypt |
+| Deploy | Vercel (API) · MongoDB Atlas (DB) |
+| Veri | SteamSpy + Steam Store API (77 seçilmiş indie oyun) |
+
+## Tasarım Dili
+
+| Rol | Renk |
+|-----|------|
+| Arka Plan — Midnight Void | `#09090B` |
+| Kart — Arcade Zinc | `#18181B` |
+| Vurgu — Neon Pink | `#FF0055` |
+
+Yazı tipleri: **Space Grotesk** (başlıklar) · **Outfit** (açıklamalar)
+
+## Kurulum
 
 ### Backend
-* **Node.js & Express.js:** Hızlı ve ölçeklenebilir RESTful API.
-* **MongoDB & Mongoose:** Esnek NoSQL veritabanı.
-* **Güvenlik:** JWT tabanlı kimlik doğrulama, bcrypt şifreleme.
 
-### Frontend
-* **Flutter:** Tek kod tabanı ile mobil, web ve masaüstü arayüzü.
-* **Riverpod:** Modern, performanslı durum yönetimi (State Management).
-* **Dio:** Güçlü HTTP istemcisi (Interceptors ile otomatik Token yönetimi).
-* **Card Swiper:** Pürüzsüz kaydırma animasyonları.
-
-## 🎨 Tasarım Dili
-* **Arka Plan (Midnight Void):** `#09090B` (Kapkaranlık, derin ve odaklayıcı)
-* **Kartlar (Arcade Zinc):** `#18181B`
-* **Vurgular (Neon Pink):** `#FF0055` (Cyberpunk hissiyatı, tetikleyici aksiyon rengi)
-
-## 🚀 Kurulum ve Çalıştırma
-
-### 1. Backend'i Başlatma
 ```bash
 cd backend
 npm install
-# .env dosyanıza MONGODB_URI ve JWT_SECRET eklemeyi unutmayın!
-npm start
 ```
 
-### 2. Veritabanını Doldurma (Seed)
-Veritabanına efsanevi 15 bağımsız oyunu yüklemek için:
+`.env` oluştur:
+
+```
+MONGODB_URI=<MongoDB Atlas bağlantı dizesi>
+JWT_SECRET=<güçlü bir secret>
+```
+
 ```bash
-cd backend
-node seed.js
+npm start        # geliştirme sunucusu
+node seed.js     # SteamSpy'dan 77 oyunu veritabanına yükle
 ```
 
-### 3. Frontend'i Başlatma
+Canlı API: `https://indieswipe-api.vercel.app/api`
+
+### Frontend
+
 ```bash
 cd frontend
 flutter pub get
 flutter run
 ```
-*(Not: Android Emülatör kullanıyorsanız `core/constants.dart` içindeki API adresi `10.0.2.2` olmalıdır. Web testi için `localhost` kalmalıdır.)*
 
----
+## Proje Yapısı
+
+```
+IndieSwipe-Project/
+├── backend/
+│   ├── models/        # Mongoose şemaları (Game, User)
+│   ├── routes/        # auth ve games API route'ları
+│   ├── seed.js        # SteamSpy → MongoDB seed scripti
+│   └── server.js      # Express + Vercel serverless handler
+└── frontend/
+    ├── assets/        # Logo
+    └── lib/
+        ├── core/      # ApiService, AppConstants
+        └── features/
+            ├── auth/       # Login / Register ekranları
+            ├── games/      # SwipeScreen, GamesProvider, VideoCard
+            └── save_room/  # Kaydedilen oyunlar galerisi
+```
