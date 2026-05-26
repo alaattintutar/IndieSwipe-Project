@@ -24,6 +24,15 @@ app.get('/', (req, res) => {
   res.send('IndieSwipe Backend is running!');
 });
 
+app.get('/api/health', async (req, res) => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    res.json({ status: 'ok', readyState: mongoose.connection.readyState });
+  } catch (err) {
+    res.status(500).json({ status: 'error', error: err.message });
+  }
+});
+
 app.use(cors()); // Middleware to enable CORS
 
 app.use(express.json()); // Middleware to parse JSON request bodies
