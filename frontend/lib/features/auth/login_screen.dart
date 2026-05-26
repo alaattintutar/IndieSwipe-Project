@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../../core/constants.dart';
 import '../../core/api_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,11 +30,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/home');
       }
-    } catch (e) {
+    } on DioException catch (e) {
       if (mounted) {
+        final msg = e.type == DioExceptionType.connectionTimeout ||
+                e.type == DioExceptionType.receiveTimeout ||
+                e.type == DioExceptionType.sendTimeout
+            ? 'Sunucuya bağlanılamadı'
+            : e.response?.data?['message'] ?? 'Invalid credentials';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Invalid credentials'),
+            content: Text(msg),
             backgroundColor: AppConstants.cardColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

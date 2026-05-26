@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
@@ -27,11 +28,12 @@ class SaveRoomScreen extends ConsumerWidget {
       await api.delete('/games/saved/$gameId');
       ref.invalidate(savedGamesProvider);
       if (context.mounted) Navigator.pop(context); // close the sheet
-    } catch (_) {
+    } catch (e) {
+      debugPrint('deleteGame error: $e');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Could not remove game'),
+            content: Text('Oyun silinemedi: $e'),
             backgroundColor: AppConstants.cardColor,
             behavior: SnackBarBehavior.floating,
             shape:

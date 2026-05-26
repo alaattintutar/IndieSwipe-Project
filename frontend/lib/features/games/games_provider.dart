@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/api_service.dart';
 import 'game_model.dart';
@@ -89,7 +90,8 @@ class GamesNotifier extends AsyncNotifier<GamesState> {
         hasMore: hasMore,
         selectedTag: current.selectedTag,
       ));
-    } catch (_) {
+    } catch (e) {
+      debugPrint('fetchNextPage error: $e');
       state = AsyncData(current.copyWith(isLoadingMore: false));
     }
   }

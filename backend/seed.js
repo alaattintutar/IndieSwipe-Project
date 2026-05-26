@@ -51,10 +51,13 @@ async function fetchReviewSummary(appId) {
   }
 }
 
-// ── Step 4: Extract HLS video URL from movies array ────────────────────────
-// Steam now uses HLS/DASH streams instead of direct mp4/webm links
+// ── Step 4: Extract video URL from movies array ────────────────────────────
+// Prefer direct MP4 480p (works on all Android devices without HLS support).
+// Fall back to highest-quality MP4, then HLS/DASH as last resort.
 function extractVideoUrl(movies) {
   if (!movies || movies.length === 0) return '';
+  if (movies[0]?.mp4?.['480']) return movies[0].mp4['480'];
+  if (movies[0]?.mp4?.max) return movies[0].mp4.max;
   return movies[0]?.hls_h264 || movies[0]?.dash_h264 || '';
 }
 

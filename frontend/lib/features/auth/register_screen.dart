@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:dio/dio.dart';
 import '../../core/constants.dart';
 import '../../core/api_service.dart';
 
@@ -27,11 +28,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (mounted) {
         Navigator.pushReplacementNamed(context, '/login');
       }
-    } catch (e) {
+    } on DioException catch (e) {
       if (mounted) {
+        final msg = e.type == DioExceptionType.connectionTimeout ||
+                e.type == DioExceptionType.receiveTimeout ||
+                e.type == DioExceptionType.sendTimeout
+            ? 'Sunucuya bağlanılamadı'
+            : e.response?.data?['message'] ?? 'Registration failed. Check your inputs.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Registration failed. Check your inputs.'),
+            content: Text(msg),
             backgroundColor: AppConstants.cardColor,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),

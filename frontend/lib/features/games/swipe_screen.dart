@@ -678,6 +678,7 @@ class _VideoCard extends StatefulWidget {
 class _VideoCardState extends State<_VideoCard> {
   VideoPlayerController? _controller;
   bool _videoReady = false;
+  bool _isMuted = true;
 
   @override
   void initState() {
@@ -708,7 +709,15 @@ class _VideoCardState extends State<_VideoCard> {
           _videoReady = true;
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Video init error: $e');
+    }
+  }
+
+  void _toggleMute() {
+    final next = !_isMuted;
+    setState(() => _isMuted = next);
+    _controller?.setVolume(next ? 0 : 1);
   }
 
   @override
@@ -828,9 +837,31 @@ class _VideoCardState extends State<_VideoCard> {
               ),
             ),
 
+            // ── Mute / unmute button (below info button, top right) ────────
+            if (_videoReady)
+              Positioned(
+                top: 60,
+                right: 16,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24, width: 1),
+                    ),
+                    child: Icon(
+                      _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+                      color: Colors.white70,
+                      size: 15,
+                    ),
+                  ),
+                ),
+              ),
+
             // ── GAMEPLAY badge (top left) ─────────────────────────────────
-            // Cyberpunk aesthetic: neon pink dot + "GAMEPLAY" label,
-            // glowing border, semi-transparent dark background.
             if (_videoReady)
               Positioned(
                 top: 16,

@@ -19,6 +19,7 @@ class ApiService {
         return handler.next(options);
       },
       onError: (DioException error, handler) async {
+        debugPrint('API Error [${error.response?.statusCode}]: ${error.message}');
         if (error.response?.statusCode == 401) {
           final prefs = await SharedPreferences.getInstance();
           await prefs.remove('token');
