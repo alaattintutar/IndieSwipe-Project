@@ -4,7 +4,7 @@
          release builds only use this file, so it must be declared here explicitly. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="frontend"
+        android:label="IndieSwipe"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">

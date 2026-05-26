@@ -1,5 +1,6 @@
 import '../save_room/save_room_screen.dart';
 import '../profile/settings_screen.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // HapticFeedback
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -207,6 +208,9 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
                               game: visibleGames[index],
                               // isFront drives: neon glow, video play/pause
                               isFront: index == _currentIndex,
+                              onDoubleTap: index == _currentIndex
+                                  ? () => _swiperController.swipe(CardSwiperDirection.right)
+                                  : null,
                             );
                           },
                         ),
@@ -526,7 +530,6 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
   }
 }
 
-// ── _ActionButton ─────────────────────────────────────────────────────────────
 // Circular button used for the X (skip) and Heart (save) controls.
 // isGlow=true adds a neon pink BoxShadow around the heart button.
 class _ActionButton extends StatelessWidget {
@@ -669,7 +672,8 @@ class _ShimmerCardState extends State<_ShimmerCard>
 class _VideoCard extends StatefulWidget {
   final Game game;
   final bool isFront;
-  const _VideoCard({super.key, required this.game, required this.isFront});
+  final VoidCallback? onDoubleTap;
+  const _VideoCard({super.key, required this.game, required this.isFront, this.onDoubleTap});
 
   @override
   State<_VideoCard> createState() => _VideoCardState();
@@ -678,7 +682,7 @@ class _VideoCard extends StatefulWidget {
 class _VideoCardState extends State<_VideoCard> {
   VideoPlayerController? _controller;
   bool _videoReady = false;
-  bool _isMuted = true;
+  bool _isMuted = kIsWeb;
 
   @override
   void initState() {
@@ -700,7 +704,7 @@ class _VideoCardState extends State<_VideoCard> {
         Uri.parse(widget.game.videoUrl),
       );
       await controller.initialize();
-      controller.setVolume(0);
+      controller.setVolume(_isMuted ? 0 : 1);
       controller.setLooping(true);
       if (widget.isFront) controller.play();
       if (mounted) {
@@ -740,7 +744,10 @@ class _VideoCardState extends State<_VideoCard> {
     // Outer Container carries the neon border + glow (only on the front card).
     // The BoxShadow renders *outside* the widget, so it's not clipped.
     // The inner ClipRRect keeps video/image content neatly rounded.
-    return Container(
+    return GestureDetector(
+      onTap: () => _showDetails(context),
+      onDoubleTap: widget.onDoubleTap,
+      child: Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         border: widget.isFront
@@ -999,6 +1006,7 @@ class _VideoCardState extends State<_VideoCard> {
           ],
         ),
       ),
+    ),
     );
   }
 }
