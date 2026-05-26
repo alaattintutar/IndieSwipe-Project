@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- INTERNET permission is required for all network calls (Dio → Vercel API).
+         Debug and profile builds get this from their own manifests automatically;
+         release builds only use this file, so it must be declared here explicitly. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="frontend"
         android:name="${applicationName}"
