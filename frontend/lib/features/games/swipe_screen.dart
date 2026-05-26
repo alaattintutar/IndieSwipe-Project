@@ -232,7 +232,7 @@ class _SwipeScreenState extends ConsumerState<SwipeScreen> {
   // ── Always-visible top bar ─────────────────────────────────────────────────
   Widget _buildTopBar(
       BuildContext context, AsyncValue<GamesState> gamesAsync) {
-    final gamesState = gamesAsync.value;
+    final gamesState = gamesAsync.valueOrNull;
     final remaining = () {
       if (gamesState == null ||
           gamesState.games.length <= _swiperBaseIndex) return 0;
