@@ -35,17 +35,31 @@ app.use('/api/auth', authRoutes);
 const gameRoutes = require('./routes/games');
 app.use('/api/games', gameRoutes);
 
-// Connect to MongoDB using the connection string from environment variables
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('Connected to MongoDB'))
-  .catch((err) => console.log('MongoDB connection error:', err));
+// Serverless-safe MongoDB connection: reuse the existing connection across
+// warm invocations instead of reconnecting on every cold start.
+let isConnected = false;
 
-// Start the server only when this file is run directly (node server.js).
-// When Vercel imports this file as a serverless function it uses the
-// module.exports below — app.listen() must NOT be called in that case.
+async function connectDB() {
+  if (isConnected) return;
+  await mongoose.connect(process.env.MONGODB_URI);
+  isConnected = true;
+  console.log('Connected to MongoDB');
+}
+
+// Ensure DB is connected before every request hits a route handler.
+app.use(async (req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    res.status(500).json({ message: 'Database connection failed', error: err.message });
+  }
+});
+
 if (require.main === module) {
-  app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+  connectDB().then(() => {
+    app.listen(PORT, () => console.log(`Server is running on port ${PORT}`));
   });
 }
 
